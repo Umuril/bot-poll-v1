@@ -5,6 +5,15 @@ be run on a cron schedule via [Dokploy](https://dokploy.com)'s Schedule
 feature. It does one thing per run: read config from environment
 variables, post one poll message, exit.
 
+The container's own main process is deliberately idle (`sleep infinity`) —
+Dokploy's Schedule ("Application Job") feature runs commands via `docker
+exec` into an already-running container on a cron tick, it does not start
+a fresh one-shot container per run. Running the bot binary itself as the
+container's main process causes a restart loop (exits → Dokploy restarts
+the Application → posts again → exits → ...), which reposts the poll
+repeatedly instead of once per schedule. See "Deploying on Dokploy" below
+for the correct two-resource setup.
+
 ## Prerequisites
 
 - Rust (`cargo`) for local development
@@ -28,26 +37,42 @@ Check the target Discord channel for the poll.
 
 ## Docker
 
+The image's own `CMD` just keeps the container alive (`sleep infinity`) —
+running the bot means exec-ing the binary into that running container,
+the same way Dokploy's Schedule feature will:
+
 ```bash
 docker build -t bot-poll-v1:local .
-docker run --rm --env-file .env bot-poll-v1:local
+docker run -d --name bot-poll-v1 --env-file .env bot-poll-v1:local
+docker exec bot-poll-v1 /usr/local/bin/bot-poll-v1
 ```
 
 ## Deploying on Dokploy
 
-1. Create a new **Schedule** resource in Dokploy, pointing at this repo
-   (or a registry image built from this repo's `Dockerfile`).
-2. Set the cron expression for how often the poll should post (e.g. daily
-   at 9am).
-3. In the Schedule's environment variables panel, set all variables from
+Dokploy's Schedule feature runs its command via `docker exec` into an
+**already-running** container — it does not spin up a fresh one-shot
+container per cron tick. So deployment is two resources working together:
+an Application that stays idle, and a Schedule that execs the bot inside it.
+
+1. Create a new **Application** in Dokploy, pointing at this repo (or a
+   registry image built from this repo's `Dockerfile`). Deploy it — its
+   container will start and just sit idle (`sleep infinity`); that's expected.
+2. In the Application's environment variables panel, set all variables from
    `.env.example`:
    - `DISCORD_BOT_TOKEN`, `DISCORD_CHANNEL_ID`, `POLL_QUESTION`,
      `POLL_OPTIONS` (required)
    - `POLL_DURATION_HOURS`, `POLL_ALLOW_MULTISELECT`, `POLL_OPTION_EMOJIS`
      (optional, sensible defaults apply if unset)
    - `UPTIME_KUMA_PUSH_URL` (optional, see Monitoring below)
-4. Save. Dokploy will run the container on your cron schedule; each run's
-   exit code and logs show up in the Schedule's run history.
+3. Create a new **Schedule** in Dokploy, type **Application Job**, attached
+   to that Application.
+4. Set the cron expression for how often the poll should post (e.g. daily
+   at 9am), and set the command to `/usr/local/bin/bot-poll-v1`.
+5. Save. Dokploy will `docker exec` the binary into the running Application
+   container on your cron schedule; each run's exit code and logs show up
+   in the Schedule's run history. The exec inherits the Application's
+   configured env vars automatically — no separate env config needed on
+   the Schedule itself.
 
 ## Monitoring (optional)
 
@@ -66,3 +91,12 @@ crashed container, host down), point the bot at a self-hosted Uptime Kuma
 4. The bot pings the push URL with `status=up` on success and `status=down`
    on failure; if no ping arrives at all within the heartbeat interval,
    Kuma marks the monitor down and posts to your Discord alerts channel.
+
+This push monitor only tells you about the outcome of the last scheduled
+run. To separately watch whether the idle Application container itself is
+up right now (independent of the cron schedule), add a second, unrelated
+Kuma monitor of type **Docker Container** pointed at that container — no
+push URL or bot code involved, Kuma polls the Docker daemon directly. This
+needs Kuma to have a Docker Host configured (local `/var/run/docker.sock`
+if Kuma runs on the same server, or the remote TCP/HTTP Docker API
+otherwise).
