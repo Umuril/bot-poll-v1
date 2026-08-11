@@ -7,5 +7,7 @@ edition = "2021"
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 serenity = { version = "0.12", default-features = false, features = ["http", "builder", "model", "rustls_backend"] }
 reqwest = { version = "0.13", default-features = false, features = ["rustls", "query"] }
+chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
+chrono-tz = "0.10"
 anyhow = "1"
 dotenvy = "0.15"

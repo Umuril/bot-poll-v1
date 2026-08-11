@@ -5,6 +5,8 @@ use serenity::builder::{CreateMessage, CreatePoll, CreatePollAnswer};
 use serenity::http::Http;
 use serenity::model::id::{ChannelId, MessageId};
 
+mod meetup;
+
 struct Config {
     discord_bot_token: String,
     discord_channel_id: u64,
