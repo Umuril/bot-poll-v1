@@ -112,6 +112,20 @@ async fn send_poll(config: &Config) -> anyhow::Result<MessageId> {
     Ok(message.id)
 }
 
+async fn ping_kuma(push_url: &str, up: bool, msg: &str) {
+    let status = if up { "up" } else { "down" };
+    let client = reqwest::Client::new();
+    let result = client
+        .get(push_url)
+        .query(&[("status", status), ("msg", msg)])
+        .send()
+        .await;
+
+    if let Err(err) = result {
+        eprintln!("warning: failed to ping Uptime Kuma heartbeat: {err}");
+    }
+}
+
 #[tokio::main]
 async fn main() {
     dotenvy::dotenv().ok();
