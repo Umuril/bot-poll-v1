@@ -167,9 +167,6 @@ async fn ping_kuma(push_url: &str, up: bool, msg: &str) {
 async fn run(config: &Config) -> anyhow::Result<()> {
     let http = Http::new(&config.discord_bot_token);
 
-    let message_id = send_poll(&http, config).await?;
-    println!("poll posted successfully, message id: {message_id}");
-
     if let Some(ical_url) = &config.meetup_ical_url {
         let links = meetup::todays_event_links(ical_url, Utc::now()).await?;
         if links.is_empty() {
@@ -181,6 +178,9 @@ async fn run(config: &Config) -> anyhow::Result<()> {
             println!("meetup link posted for today's event: {link}");
         }
     }
+
+    let message_id = send_poll(&http, config).await?;
+    println!("poll posted successfully, message id: {message_id}");
 
     Ok(())
 }
