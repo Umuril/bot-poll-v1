@@ -43,8 +43,8 @@ docker run --rm --env-file .env bot-poll-v1:local
    `.env.example`:
    - `DISCORD_BOT_TOKEN`, `DISCORD_CHANNEL_ID`, `POLL_QUESTION`,
      `POLL_OPTIONS` (required)
-   - `POLL_DURATION_HOURS`, `POLL_ALLOW_MULTISELECT` (optional, sensible
-     defaults apply if unset)
+   - `POLL_DURATION_HOURS`, `POLL_ALLOW_MULTISELECT`, `POLL_OPTION_EMOJIS`
+     (optional, sensible defaults apply if unset)
    - `UPTIME_KUMA_PUSH_URL` (optional, see Monitoring below)
 4. Save. Dokploy will run the container on your cron schedule; each run's
    exit code and logs show up in the Schedule's run history.

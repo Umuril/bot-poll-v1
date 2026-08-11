@@ -10,6 +10,7 @@ struct Config {
     discord_channel_id: u64,
     poll_question: String,
     poll_options: Vec<String>,
+    poll_option_emojis: Vec<String>,
     poll_duration_hours: u16,
     poll_allow_multiselect: bool,
     uptime_kuma_push_url: Option<String>,
@@ -48,6 +49,21 @@ impl Config {
             );
         }
 
+        let poll_option_emojis: Vec<String> = match std::env::var("POLL_OPTION_EMOJIS") {
+            Ok(raw) => {
+                let emojis: Vec<String> = raw.split(',').map(|s| s.trim().to_string()).collect();
+                if emojis.len() != poll_options.len() {
+                    anyhow::bail!(
+                        "POLL_OPTION_EMOJIS must have exactly one entry per POLL_OPTIONS option ({} expected, got {})",
+                        poll_options.len(),
+                        emojis.len()
+                    );
+                }
+                emojis
+            }
+            Err(_) => vec![String::new(); poll_options.len()],
+        };
+
         let poll_duration_hours: u16 = match std::env::var("POLL_DURATION_HOURS") {
             Ok(raw) => raw.parse().with_context(|| {
                 format!("POLL_DURATION_HOURS must be a valid number, got {raw:?}")
@@ -74,6 +90,7 @@ impl Config {
             discord_channel_id,
             poll_question,
             poll_options,
+            poll_option_emojis,
             poll_duration_hours,
             poll_allow_multiselect,
             uptime_kuma_push_url,
@@ -87,7 +104,15 @@ async fn send_poll(config: &Config) -> anyhow::Result<MessageId> {
     let answers: Vec<CreatePollAnswer> = config
         .poll_options
         .iter()
-        .map(|text| CreatePollAnswer::new().text(text.as_str()))
+        .zip(config.poll_option_emojis.iter())
+        .map(|(text, emoji)| {
+            let answer = CreatePollAnswer::new().text(text.as_str());
+            if emoji.is_empty() {
+                answer
+            } else {
+                answer.emoji(emoji.clone())
+            }
+        })
         .collect();
 
     let poll = CreatePoll::new()
