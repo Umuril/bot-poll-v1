@@ -16,7 +16,6 @@ struct Config {
     poll_option_emojis: Vec<String>,
     poll_duration_hours: u16,
     poll_allow_multiselect: bool,
-    uptime_kuma_push_url: Option<String>,
     meetup_ical_url: Option<String>,
 }
 
@@ -87,8 +86,6 @@ impl Config {
             Err(_) => false,
         };
 
-        let uptime_kuma_push_url = std::env::var("UPTIME_KUMA_PUSH_URL").ok();
-
         let meetup_ical_url = std::env::var("MEETUP_ICAL_URL").ok();
 
         Ok(Config {
@@ -99,7 +96,6 @@ impl Config {
             poll_option_emojis,
             poll_duration_hours,
             poll_allow_multiselect,
-            uptime_kuma_push_url,
             meetup_ical_url,
         })
     }
@@ -150,20 +146,6 @@ async fn send_text_message(http: &Http, channel_id: ChannelId, content: &str) ->
     Ok(())
 }
 
-async fn ping_kuma(push_url: &str, up: bool, msg: &str) {
-    let status = if up { "up" } else { "down" };
-    let client = reqwest::Client::new();
-    let result = client
-        .get(push_url)
-        .query(&[("status", status), ("msg", msg)])
-        .send()
-        .await;
-
-    if let Err(err) = result {
-        eprintln!("warning: failed to ping Uptime Kuma heartbeat: {err}");
-    }
-}
-
 async fn run(config: &Config) -> anyhow::Result<()> {
     let http = Http::new(&config.discord_bot_token);
 
@@ -197,18 +179,8 @@ async fn main() {
         }
     };
 
-    match run(&config).await {
-        Ok(()) => {
-            if let Some(push_url) = &config.uptime_kuma_push_url {
-                ping_kuma(push_url, true, "OK").await;
-            }
-        }
-        Err(err) => {
-            eprintln!("error: {err:#}");
-            if let Some(push_url) = &config.uptime_kuma_push_url {
-                ping_kuma(push_url, false, &format!("{err:#}")).await;
-            }
-            std::process::exit(1);
-        }
+    if let Err(err) = run(&config).await {
+        eprintln!("error: {err:#}");
+        std::process::exit(1);
     }
 }

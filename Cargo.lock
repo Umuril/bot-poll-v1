@@ -1122,8 +1122,6 @@ dependencies = [
  "rustls 0.23.43",
  "rustls-pki-types",
  "rustls-platform-verifier",
- "serde",
- "serde_urlencoded",
  "sync_wrapper",
  "tokio",
  "tokio-rustls 0.26.4",

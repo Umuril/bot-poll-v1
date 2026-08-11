@@ -25,8 +25,6 @@ for the correct two-resource setup.
 - If using `MEETUP_ICAL_URL` (see below), the bot also needs the "Mention
   @everyone, @here, and All Roles" permission on the target channel, or the
   follow-up message will post but not actually notify anyone
-- (Optional) A self-hosted [Uptime Kuma](https://github.com/louislam/uptime-kuma)
-  instance with a "Push" monitor, for heartbeat monitoring
 
 ## Local development
 
@@ -66,7 +64,6 @@ an Application that stays idle, and a Schedule that execs the bot inside it.
      `POLL_OPTIONS` (required)
    - `POLL_DURATION_HOURS`, `POLL_ALLOW_MULTISELECT`, `POLL_OPTION_EMOJIS`
      (optional, sensible defaults apply if unset)
-   - `UPTIME_KUMA_PUSH_URL` (optional, see Monitoring below)
 3. Create a new **Schedule** in Dokploy, type **Application Job**, attached
    to that Application.
 4. Set the cron expression for how often the poll should post (e.g. daily
@@ -76,33 +73,6 @@ an Application that stays idle, and a Schedule that execs the bot inside it.
    in the Schedule's run history. The exec inherits the Application's
    configured env vars automatically — no separate env config needed on
    the Schedule itself.
-
-## Monitoring (optional)
-
-Dokploy's run history only tells you the outcome *if the container ran at
-all*. To also catch the schedule silently not firing (misconfigured cron,
-crashed container, host down), point the bot at a self-hosted Uptime Kuma
-**Push monitor**:
-
-1. In Kuma, create a new monitor of type **Push**, with a "heartbeat
-   interval" a bit longer than your poll's cron interval (e.g. cron is
-   daily → set the interval to ~26 hours so a late run doesn't false-alarm).
-2. Copy the monitor's push URL into `UPTIME_KUMA_PUSH_URL`.
-3. On Kuma's monitor, add a **Discord webhook notification**: create a
-   webhook on an alerts channel in Discord (Channel Settings → Integrations
-   → Webhooks), paste its URL into Kuma's notification settings.
-4. The bot pings the push URL with `status=up` on success and `status=down`
-   on failure; if no ping arrives at all within the heartbeat interval,
-   Kuma marks the monitor down and posts to your Discord alerts channel.
-
-This push monitor only tells you about the outcome of the last scheduled
-run. To separately watch whether the idle Application container itself is
-up right now (independent of the cron schedule), add a second, unrelated
-Kuma monitor of type **Docker Container** pointed at that container — no
-push URL or bot code involved, Kuma polls the Docker daemon directly. This
-needs Kuma to have a Docker Host configured (local `/var/run/docker.sock`
-if Kuma runs on the same server, or the remote TCP/HTTP Docker API
-otherwise).
 
 ## Same-day meetup link (optional)
 
@@ -114,8 +84,7 @@ channel message: `@everyone @here <event link>`.
 
 - If unset, this step is skipped entirely — no behavior change.
 - If set, a fetch or parse failure on the feed fails the whole run (same
-  as a Discord API error) — the run exits non-zero and, if configured,
-  pings Uptime Kuma with `status=down`.
+  as a Discord API error) — the run exits non-zero.
 - The bot needs the **"Mention @everyone, @here, and All Roles"**
   permission on the target channel for the mentions in the follow-up
   message to actually notify members, rather than post as inert text.
