@@ -22,6 +22,9 @@ for the correct two-resource setup.
   https://discord.com/developers/applications, add a Bot, copy its Token)
 - The bot must be invited to your server with the "Send Messages" permission
   on the target channel
+- If using `MEETUP_ICAL_URL` (see below), the bot also needs the "Mention
+  @everyone, @here, and All Roles" permission on the target channel, or the
+  follow-up message will post but not actually notify anyone
 - (Optional) A self-hosted [Uptime Kuma](https://github.com/louislam/uptime-kuma)
   instance with a "Push" monitor, for heartbeat monitoring
 
@@ -100,3 +103,22 @@ push URL or bot code involved, Kuma polls the Docker daemon directly. This
 needs Kuma to have a Docker Host configured (local `/var/run/docker.sock`
 if Kuma runs on the same server, or the remote TCP/HTTP Docker API
 otherwise).
+
+## Same-day meetup link (optional)
+
+If `MEETUP_ICAL_URL` is set to a Meetup group's iCal feed URL (e.g.
+`https://www.meetup.com/<group-slug>/events/ical/`), the bot checks that
+feed after posting the poll. For any event whose start date is today (in
+the event's own timezone, as given in the feed), it posts a follow-up
+channel message: `@everyone @here <event link>`.
+
+- If unset, this step is skipped entirely — no behavior change.
+- If set, a fetch or parse failure on the feed fails the whole run (same
+  as a Discord API error) — the run exits non-zero and, if configured,
+  pings Uptime Kuma with `status=down`.
+- The bot needs the **"Mention @everyone, @here, and All Roles"**
+  permission on the target channel for the mentions in the follow-up
+  message to actually notify members, rather than post as inert text.
+- Running the bot more than once on the same day posts the follow-up
+  message that many times — there's no dedup/state, consistent with the
+  bot's stateless, one-shot-per-invocation design.
