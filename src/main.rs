@@ -141,9 +141,15 @@ async fn main() {
     match send_poll(&config).await {
         Ok(message_id) => {
             println!("poll posted successfully, message id: {message_id}");
+            if let Some(push_url) = &config.uptime_kuma_push_url {
+                ping_kuma(push_url, true, "OK").await;
+            }
         }
         Err(err) => {
             eprintln!("error: {err:#}");
+            if let Some(push_url) = &config.uptime_kuma_push_url {
+                ping_kuma(push_url, false, &format!("{err:#}")).await;
+            }
             std::process::exit(1);
         }
     }
