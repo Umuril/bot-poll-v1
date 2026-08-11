@@ -1,6 +1,7 @@
 use std::time::Duration;
 
 use anyhow::Context;
+use chrono::Utc;
 use serenity::builder::{CreateMessage, CreatePoll, CreatePollAnswer};
 use serenity::http::Http;
 use serenity::model::id::{ChannelId, MessageId};
@@ -16,6 +17,7 @@ struct Config {
     poll_duration_hours: u16,
     poll_allow_multiselect: bool,
     uptime_kuma_push_url: Option<String>,
+    meetup_ical_url: Option<String>,
 }
 
 fn require_env(key: &str) -> anyhow::Result<String> {
@@ -87,6 +89,8 @@ impl Config {
 
         let uptime_kuma_push_url = std::env::var("UPTIME_KUMA_PUSH_URL").ok();
 
+        let meetup_ical_url = std::env::var("MEETUP_ICAL_URL").ok();
+
         Ok(Config {
             discord_bot_token,
             discord_channel_id,
@@ -96,13 +100,12 @@ impl Config {
             poll_duration_hours,
             poll_allow_multiselect,
             uptime_kuma_push_url,
+            meetup_ical_url,
         })
     }
 }
 
-async fn send_poll(config: &Config) -> anyhow::Result<MessageId> {
-    let http = Http::new(&config.discord_bot_token);
-
+async fn send_poll(http: &Http, config: &Config) -> anyhow::Result<MessageId> {
     let answers: Vec<CreatePollAnswer> = config
         .poll_options
         .iter()
@@ -132,11 +135,19 @@ async fn send_poll(config: &Config) -> anyhow::Result<MessageId> {
 
     let channel_id = ChannelId::new(config.discord_channel_id);
     let message = channel_id
-        .send_message(&http, CreateMessage::new().poll(poll))
+        .send_message(http, CreateMessage::new().poll(poll))
         .await
         .context("failed to send poll message to Discord")?;
 
     Ok(message.id)
+}
+
+async fn send_text_message(http: &Http, channel_id: ChannelId, content: &str) -> anyhow::Result<()> {
+    channel_id
+        .send_message(http, CreateMessage::new().content(content))
+        .await
+        .context("failed to send text message to Discord")?;
+    Ok(())
 }
 
 async fn ping_kuma(push_url: &str, up: bool, msg: &str) {
@@ -153,6 +164,27 @@ async fn ping_kuma(push_url: &str, up: bool, msg: &str) {
     }
 }
 
+async fn run(config: &Config) -> anyhow::Result<()> {
+    let http = Http::new(&config.discord_bot_token);
+
+    let message_id = send_poll(&http, config).await?;
+    println!("poll posted successfully, message id: {message_id}");
+
+    if let Some(ical_url) = &config.meetup_ical_url {
+        let links = meetup::todays_event_links(ical_url, Utc::now()).await?;
+        if links.is_empty() {
+            println!("no meetup event today, no follow-up message sent");
+        }
+        for link in &links {
+            let content = format!("@everyone @here {link}");
+            send_text_message(&http, ChannelId::new(config.discord_channel_id), &content).await?;
+            println!("meetup link posted for today's event: {link}");
+        }
+    }
+
+    Ok(())
+}
+
 #[tokio::main]
 async fn main() {
     dotenvy::dotenv().ok();
@@ -165,9 +197,8 @@ async fn main() {
         }
     };
 
-    match send_poll(&config).await {
-        Ok(message_id) => {
-            println!("poll posted successfully, message id: {message_id}");
+    match run(&config).await {
+        Ok(()) => {
             if let Some(push_url) = &config.uptime_kuma_push_url {
                 ping_kuma(push_url, true, "OK").await;
             }
