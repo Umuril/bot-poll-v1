@@ -1,4 +1,9 @@
+use std::time::Duration;
+
 use anyhow::Context;
+use serenity::builder::{CreateMessage, CreatePoll, CreatePollAnswer};
+use serenity::http::Http;
+use serenity::model::id::{ChannelId, MessageId};
 
 struct Config {
     discord_bot_token: String,
@@ -76,18 +81,52 @@ impl Config {
     }
 }
 
-fn main() {
+async fn send_poll(config: &Config) -> anyhow::Result<MessageId> {
+    let http = Http::new(&config.discord_bot_token);
+
+    let answers: Vec<CreatePollAnswer> = config
+        .poll_options
+        .iter()
+        .map(|text| CreatePollAnswer::new().text(text.as_str()))
+        .collect();
+
+    let poll = CreatePoll::new()
+        .question(config.poll_question.as_str())
+        .answers(answers)
+        .duration(Duration::from_secs(
+            u64::from(config.poll_duration_hours) * 3600,
+        ));
+
+    let poll = if config.poll_allow_multiselect {
+        poll.allow_multiselect()
+    } else {
+        poll
+    };
+
+    let channel_id = ChannelId::new(config.discord_channel_id);
+    let message = channel_id
+        .send_message(&http, CreateMessage::new().poll(poll))
+        .await
+        .context("failed to send poll message to Discord")?;
+
+    Ok(message.id)
+}
+
+#[tokio::main]
+async fn main() {
     dotenvy::dotenv().ok();
 
-    match Config::from_env() {
-        Ok(config) => {
-            println!("parsed config ok:");
-            println!("  discord_channel_id = {}", config.discord_channel_id);
-            println!("  poll_question = {:?}", config.poll_question);
-            println!("  poll_options = {:?}", config.poll_options);
-            println!("  poll_duration_hours = {}", config.poll_duration_hours);
-            println!("  poll_allow_multiselect = {}", config.poll_allow_multiselect);
-            println!("  uptime_kuma_push_url = {:?}", config.uptime_kuma_push_url);
+    let config = match Config::from_env() {
+        Ok(config) => config,
+        Err(err) => {
+            eprintln!("error: {err:#}");
+            std::process::exit(1);
+        }
+    };
+
+    match send_poll(&config).await {
+        Ok(message_id) => {
+            println!("poll posted successfully, message id: {message_id}");
         }
         Err(err) => {
             eprintln!("error: {err:#}");
